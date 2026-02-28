@@ -7,14 +7,14 @@ Modification Description:
 Modification 1. Add support for Ascend NPU
 """
 from torch.autograd import Function
-import mx_driving._C
+import rampage._C
 
 
 class UniqueFunction(Function):
     @staticmethod
     # 'pylint: disable=too-many-arguments,huawei-too-many-arguments
     def forward(ctx, input_tensor):
-        y = mx_driving._C.npu_unique(input_tensor)
+        y = rampage._C.npu_unique(input_tensor)
         return y
 
 
