@@ -101,7 +101,7 @@ python setup.py bdist_wheel
 python setup.py develop --kernel-name="DeformableConv2d;MultiScaleDeformableAttn"
 
 # 使用 arch35 架构（A5算子）
-USE_ARCH35=true python setup.py xxxxxxx
+USE_ARCH35=true python setup.py bdist_wheel
 
 ```
 
