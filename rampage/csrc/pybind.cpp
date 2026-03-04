@@ -32,4 +32,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("_init_op_api_so_path", &init_op_api_so_path);
     // npu_unique
     m.def("npu_unique", &npu_unique);
+    // npu_add_custom
+    m.def("npu_add_custom", &npu_add_custom);
 }
