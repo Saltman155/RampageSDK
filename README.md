@@ -2,7 +2,7 @@
 
 ## 1. 项目概述
 
-RampageSDK 是一个面向华为昇腾（Ascend）NPU 的自定义算子库，旨在为自动驾驶系统提供加速支持。它基于 CANN（Compute Architecture for Neural Networks）工具链，通过 AscendC 编程模型编写高性能自定义算子，并通过 PyTorch + torch_npu 接口将算子暴露给 Python 用户使用。
+RampageSDK 是一个面向华为昇腾（Ascend）NPU 的自定义算子库，旨在为昇腾NPU计算提供加速支持。它基于 CANN（Compute Architecture for Neural Networks）工具链，通过 AscendC 编程模型编写高性能自定义算子，并通过 PyTorch + torch_npu 接口将算子暴露给 Python 用户使用。
 
 ### 1.1 核心特性
 
@@ -101,45 +101,19 @@ USE_ARCH35=true python setup.py bdist_wheel
 请参考 [框架详解](docs/FRAME.md)。
 
 
-
-## 5. 算子结构详解
-
-请参考 [算子结构详解（以 UniqueV2 为例）](docs/OP_SAMPLE.md)。
-
-
-## 6. 如何添加一个新算子
+## 5. 如何添加一个新算子
 
 请参考 [算子结构详解（以 MyCustomOp 为例）](docs/OP_ADD.md)。
 
 
+## 6. 算子结构详解
+
+请参考 [算子结构详解（以 UniqueV2 为例）](docs/OP_SAMPLE.md)。
+
 
 ## 7. 常见问题
 
-### Q1: 如何查看构建产物？
-
-编译完成后，算子包位于 `rampage/packages/vendors/customize/` 目录下：
-```
-packages/vendors/customize/
-├── op_proto/           # 算子原型库
-├── op_impl/            # Tiling 库 + Kernel 实现 + 二进制
-├── op_api/             # ACLNN API 库和头文件
-├── framework/          # npu_supported_ops.json
-└── version.info
-```
-
-### Q2: 如何支持新的芯片型号？
-
-在 `kernels/op_host/xxx.cpp` 的 OpDef 中添加：
-```cpp
-this->AICore().AddConfig("ascend_new_chip");
-```
-同时在 `CMakePresets.json` 的 `ASCEND_COMPUTE_UNIT` 列表中添加新芯片标识。
-
-### Q3: 如何为 Arch35 架构添加算子？
-
-1. 在 `kernels_arch35/op_host/` 和 `kernels_arch35/op_kernel/` 下添加算子文件
-2. 需要在 `kernels_arch35/CMakeLists.txt` 中添加对应的构建逻辑（参考 `kernels/CMakeLists.txt`）
-3. 构建时设置 `USE_ARCH35=true`
+请参考 [QA文档](docs/QA.md)。
 
 ---
 
