@@ -48,9 +48,7 @@ RampageSDK/
 │   │   ├── OpApiCommon.h       # OpAPI 调用宏（EXEC_NPU_CMD 等）
 │   │   ├── common.h            # 通用定义
 │   │   └── utils.h             # 工具函数
-│   ├── ge/                     # GE（Graph Engine）相关头文件
-│   ├── log/                    # 日志头文件
-│   └── onnx/                   # ONNX 相关头文件
+│   └── ge/                     # GE（Graph Engine）相关头文件
 └── scripts/                    # 构建与安装脚本
     ├── build_kernel.sh         # 独立 Kernel 构建脚本
     ├── install_kernel.sh       # Kernel 安装到 OPP 路径的脚本
