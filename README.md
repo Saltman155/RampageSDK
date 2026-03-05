@@ -27,30 +27,23 @@ RampageSDK/
 │   ├── intf.cmake              # 编译选项接口库（编译 flags、链接选项等）
 │   ├── makeself.cmake          # 打包相关
 │   └── util/                   # Python/Shell 辅助脚本（代码生成、配置解析等）
+├── ci/                         # ci构建脚本
 ├── kernels/                    # 标准架构算子 Kernel 源码
 │   ├── CMakeLists.txt          # Kernel 构建逻辑（Stage 0 + Stage 1）
 │   ├── op_host/                # Host 侧代码（算子定义、Tiling 函数、形状推导）
-│   │   ├── common.h            # 通用工具函数
-│   │   ├── unique_v2_tiling.h  # UniqueV2 算子 Tiling 数据定义
-│   │   └── unique_v2.cpp       # UniqueV2 算子定义（InferShape + Tiling + OpDef）
 │   └── op_kernel/              # Device 侧代码（AscendC Kernel 实现）
-│       ├── unique_v2.h         # UniqueV2 Kernel 类实现
-│       └── unique_v2.cpp       # UniqueV2 Kernel 入口函数
 ├── kernels_arch35/             # Arch35 架构（ascend910_95）专用 Kernel（结构同 kernels/）
-│   └── CMakeLists.txt          # 当前为空，待添加 arch35 专属算子
+│   └── CMakeLists.txt          # Arch35 专属算子构建逻辑
 ├── rampage/                    # Python 包源码
 │   ├── __init__.py             # 包初始化、环境配置、算子导出
 │   ├── get_chip_info.py        # 芯片型号检测（区分 arch35）
 │   ├── csrc/                   # C++ 扩展源码
 │   │   ├── CMakeLists.txt      # C++ 扩展构建（Stage 2，生成 _C.so）
 │   │   ├── pybind.cpp          # PyBind11 绑定入口
-│   │   ├── Unique.cpp          # npu_unique 算子的 C++ 封装
 │   │   └── OpApiCommon.cpp     # OpAPI 通用工具（参数序列化、哈希计算）
 │   └── ops/                    # Python 算子接口
-│       ├── __init__.py
-│       └── npu_unique.py       # npu_unique 算子的 Python 封装
 ├── include/                    # 公共头文件
-│   ├── csrc/
+│   ├── csrc/                   # C++ 扩展相关头文件
 │   │   ├── functions.h         # 所有算子的 C++ 函数声明
 │   │   ├── OpApiCommon.h       # OpAPI 调用宏（EXEC_NPU_CMD 等）
 │   │   ├── common.h            # 通用定义
@@ -118,7 +111,7 @@ USE_ARCH35=true python setup.py bdist_wheel
 
 ## 6. 如何添加一个新算子
 
-请参考 [算子结构详解（以 UniqueV2 为例）](docs/OP_ADD.md)。
+请参考 [算子结构详解（以 MyCustomOp 为例）](docs/OP_ADD.md)。
 
 
 
