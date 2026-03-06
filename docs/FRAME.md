@@ -151,7 +151,7 @@ add_custom_command(
 bash scripts/build_kernel.sh
 
 # 构建单个算子
-bash scripts/build_kernel.sh --single_op=unique_v2
+bash scripts/build_kernel.sh --single_op=unique_v3
 
 # Debug 模式构建
 bash scripts/build_kernel.sh --build_type=Debug
@@ -206,16 +206,16 @@ rampage.ops.npu_unique.py
 rampage._C.npu_unique()  ──→  Unique.cpp: npu_unique()
                                    │
                                    ▼
-                              EXEC_NPU_CMD_SYNC(aclnnUniqueV2, ...)
+                              EXEC_NPU_CMD_SYNC(aclnnUniqueV3, ...)
                                    │
                                    ▼
                               libcust_opapi.so                 
-                              → aclnnUniqueV2GetWorkspaceSize()
-                              → aclnnUniqueV2()
+                              → aclnnUniqueV3GetWorkspaceSize()
+                              → aclnnUniqueV3()
                                    │
                                    ▼
                               libcust_opmaster_rt2.0.so
-                              → UniqueV2TilingFunc() ──→  Kernel: unique_v2()
+                              → UniqueV3TilingFunc() ──→  Kernel: unique_v3()
                                                           (AscendC AICore)
 ```
 

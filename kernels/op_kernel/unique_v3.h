@@ -2,6 +2,7 @@
 * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
 */
 #include "kernel_operator.h"
+#include "stdio.h"
 using namespace AscendC;
 
 
@@ -30,9 +31,12 @@ public:
     __aicore__ inline KernelUnique(TPipe& pipe) : pipe(pipe) {}
     // Each block process diffent part of data. This function returns the element-wise first index of data by blockIdx.
     __aicore__ inline size_t GetGlobalOffset(const uint32_t blockIdx);
-    __aicore__ inline void Init(GM_ADDR input, GM_ADDR output, GM_ADDR uniqueCnt, GM_ADDR workspace,
+    __aicore__ inline void Init(
+        GM_ADDR input, GM_ADDR output, GM_ADDR uniqueCnt, 
+        GM_ADDR inverse, GM_ADDR counts, GM_ADDR workspace,
         const uint32_t totalLength, const uint32_t shortBlockTileNum, const uint16_t tileLength,
-        const uint16_t tailLength, const uint8_t aivNum, const uint8_t blockNum, const uint8_t shortBlockNum);
+        const uint16_t tailLength, const uint8_t aivNum, const uint8_t blockNum, const uint8_t shortBlockNum,
+        const bool flagInverse, const bool flagCounts);
     __aicore__ inline void Process();
 
 private:
@@ -51,10 +55,29 @@ private:
     __aicore__ inline static void MrgSortGM(GlobalTensor<float>&& dstGlobal, GMSSrcList& srcList, GMSParams& params);
     __aicore__ inline void BlockSortV2();
     __aicore__ inline void GlobalSortV2();
+
+    __aicore__ inline void CalculateInverse();
+    __aicore__ inline void CalculateCounts();
+    
+
+    __aicore__ inline void CopyOriginalArrayIdx2GM(
+        const LocalTensor<float> &ArrayLocal, const LocalTensor<float> &idxLocal, 
+        const LocalTensor<uint32_t> &tmpLocal, int32_t progress);    
+    __aicore__ inline void TileCumulativeSum(const LocalTensor<float> &sortedLocal1, 
+        const LocalTensor<float> &sortedLocal2, const LocalTensor<uint32_t>& tmpLocal, 
+        int32_t progress, int32_t &unique_num, float &firstValue, float &endValue);
+    __aicore__ inline void BlockCumulativeSum();
+    
+    __aicore__ inline static bool TileCalculateCounts(const LocalTensor<float>& dstVal,
+        const LocalTensor<float>& srcLocal, const LocalTensor<float>& shiftedLocal, 
+        const LocalTensor<uint32_t>& bitMask32, const uint16_t elemLength, 
+        uint64_t& arrayLen,int32_t& beforeNumCnt, float& beforeNumValue);        
     __aicore__ inline static void ConsecutiveUnique(const LocalTensor<float>& dstVal,
         const LocalTensor<float>& srcLocal, const LocalTensor<float>& shiftedLocal,
         const LocalTensor<uint32_t>& bitMask16, const uint16_t elemLength, uint64_t& tileUniqueCnt);
     __aicore__ inline void TileUnique(const int32_t progress);
+    __aicore__ inline void CopyOutCounts();
+    __aicore__ inline void CopyOutInverse();
     __aicore__ inline void CopyOut();
 
 private:
@@ -88,6 +111,19 @@ private:
     GlobalTensor<int32_t> IBSyncGlobal;
     GlobalTensor<uint32_t> blockUniqueCntGlobal;
 
+    GlobalTensor<int32_t> counterResult;
+    GlobalTensor<int32_t> counterGlobal;
+    GlobalTensor<float> counterMsg;
+
+    GlobalTensor<int32_t> inverseGlobal1;
+    GlobalTensor<int32_t> inverseGlobal2;
+    GlobalTensor<int32_t> inverseBlock1;
+    GlobalTensor<int32_t> inverseBlock2;
+    GlobalTensor<float> inverseMsg;
+
+    GlobalTensor<int32_t> inverseResult;
+    GlobalTensor<int32_t> inverseResultBlock;
+
     uint16_t syncWorkspaceSize;
     uint8_t eventID {0};
     uint64_t blockUniqueCnt {0};
@@ -103,6 +139,11 @@ private:
     size_t globalOffset; // Offset of data for current block.
     size_t blockLength;  // Length of current block.
     bool hasInfFlag {false};
+    bool flagInverse {false};
+    bool flagCounts {false};
+
+    //插入一个同步流水
+    uint32_t eventIDME3ToME2;
 };
 
 // Each block process diffent part of data. This function returns the element-wise first index of data by blockIdx.
@@ -118,15 +159,20 @@ __aicore__ inline size_t KernelUnique<T>::GetGlobalOffset(const uint32_t blockId
 }
 
 template<typename T>
-__aicore__ inline void KernelUnique<T>::Init(GM_ADDR input, GM_ADDR output, GM_ADDR uniqueCnt, GM_ADDR workspace,
+__aicore__ inline void KernelUnique<T>::Init(
+    GM_ADDR input, GM_ADDR output, GM_ADDR uniqueCnt, 
+    GM_ADDR inverse, GM_ADDR counts, GM_ADDR workspace,
     const uint32_t totalLength, const uint32_t shortBlockTileNum, const uint16_t tileLength,
-    const uint16_t tailLength, const uint8_t aivNum, const uint8_t blockNum, const uint8_t shortBlockNum)
+    const uint16_t tailLength, const uint8_t aivNum, const uint8_t blockNum, const uint8_t shortBlockNum,
+    const bool flagInverse, const bool flagCounts)
 {
     this->totalLength = totalLength;
     this->shortBlockTileNum = shortBlockTileNum;
     this->tailLength = tailLength;
     this->blockNum = blockNum;
     this->shortBlockNum = shortBlockNum;
+    this->flagInverse = flagInverse;
+    this->flagCounts = flagCounts;
 
     uint32_t alignedTotalLength = (totalLength + TILE_LENGTH - 1) / TILE_LENGTH * TILE_LENGTH;
     const bool isShortBlock = this->shortBlockNum > GetBlockIdx();
@@ -141,6 +187,10 @@ __aicore__ inline void KernelUnique<T>::Init(GM_ADDR input, GM_ADDR output, GM_A
     dstGlobal1.SetGlobalBuffer((__gm__ T*)output, alignedTotalLength);
     dstGlobal1As32.SetGlobalBuffer((__gm__ int32_t*)output, alignedTotalLength * sizeof(T) / sizeof(int32_t));
     uniqueCntGlobal.SetGlobalBuffer((__gm__ int32_t*)uniqueCnt, 1);
+
+    inverseResult.SetGlobalBuffer((__gm__ int32_t*)inverse, alignedTotalLength);
+    counterResult.SetGlobalBuffer((__gm__ int32_t*)counts, alignedTotalLength);
+    inverseResultBlock.SetGlobalBuffer((__gm__ int32_t*)inverse + globalOffset, this->blockLength);
 
     // sortedBlock is offsetted, and could only see the data that this block should process.
     sortedBlock1.SetGlobalBuffer((__gm__ float*)workspace + globalOffset * SORT_DATATYPE_SIZE_FACTOR,
@@ -164,6 +214,20 @@ __aicore__ inline void KernelUnique<T>::Init(GM_ADDR input, GM_ADDR output, GM_A
         (__gm__ int32_t*)workspace + alignedTotalLength * SORT_DATATYPE_SIZE_FACTOR * 2, syncWorkspaceSize);
     blockUniqueCntGlobal.SetGlobalBuffer((__gm__ uint32_t*)workspace + alignedTotalLength * 4 + syncWorkspaceSize,
         (blockNum + 7) / 8 * 8); // Length aligned up to 32B.
+
+    // 设置counter和inverse的临时全局空间，把前面的偏移全加过来
+    // 这里kernel侧定义和host侧的布局是反过来的，所以看起来和host侧不一样，看了半天
+    uint32_t counterOffset = alignedTotalLength * 4 + syncWorkspaceSize + (blockNum + 7) / 8 * 8;
+    counterGlobal.SetGlobalBuffer((__gm__ int32_t*)workspace + counterOffset, alignedTotalLength);
+    counterMsg.SetGlobalBuffer((__gm__ float*)workspace + counterOffset + alignedTotalLength, ((blockNum + 7) / 8 * 8) * 3);
+
+    uint32_t inverstOffset = counterOffset + alignedTotalLength + ((blockNum + 7) / 8 * 8) * 3;
+    
+    inverseGlobal1.SetGlobalBuffer((__gm__ int32_t*)workspace + inverstOffset, alignedTotalLength * 2);
+    inverseGlobal2.SetGlobalBuffer((__gm__ int32_t*)workspace + inverstOffset + alignedTotalLength * 2, alignedTotalLength * 2);
+    inverseBlock1.SetGlobalBuffer((__gm__ int32_t*)workspace + inverstOffset + globalOffset * SORT_DATATYPE_SIZE_FACTOR, this->blockLength * SORT_DATATYPE_SIZE_FACTOR);
+    inverseBlock2.SetGlobalBuffer((__gm__ int32_t*)workspace + inverstOffset + alignedTotalLength * 2 + globalOffset * SORT_DATATYPE_SIZE_FACTOR, this->blockLength * SORT_DATATYPE_SIZE_FACTOR);
+    inverseMsg.SetGlobalBuffer((__gm__ float*)workspace + inverstOffset + alignedTotalLength * 4, ((blockNum + 7) / 8 * 8) * 3);
 
     // Initialize sync buff.
     if (GetBlockNum() > 1) {
@@ -204,6 +268,16 @@ __aicore__ inline void KernelUnique<T>::Process()
         if (sortedGlobal1.GetValue((totalLength - 1) * 2) == -FLOAT_INF) {
             hasInfFlag = true;
         }
+    }
+
+    // counts计算逻辑
+    if (flagCounts) {
+        CalculateCounts();
+    }
+
+    // inverse计算逻辑
+    if (flagInverse) {
+        CalculateInverse();
     }
 
     // Do unique in each block based on tiles.
@@ -280,7 +354,10 @@ __aicore__ inline void KernelUnique<T>::Elem32Sort(const int32_t progress)
     LocalTensor<int32_t> arithLocal = srcLocal.template ReinterpretCast<int32_t>()[TILE_LENGTH];
 
     int32_t baseOffset = progress * TILE_LENGTH + this->globalOffset; // calc tileOffset
-    Duplicate(arithLocal, baseOffset, TILE_LENGTH);
+
+    // Duplicate(arithLocal, baseOffset, TILE_LENGTH);
+    ArithProgression(arithLocal, baseOffset, (int32_t)1, TILE_LENGTH);
+
     PipeBarrier<PIPE_V>();
 
     LocalTensor<uint32_t> uidArray = arithLocal.template ReinterpretCast<uint32_t>();
@@ -666,5 +743,16 @@ __aicore__ inline void KernelUnique<T>::CopyOut()
         DataCopyPad(uniqueCntGlobal, uniqueVal32, {1, static_cast<uint16_t>(sizeof(uint32_t) * 1), 0, 0});
         PipeBarrier<PIPE_ALL>();
     }
+
+    if (flagCounts) {
+        CopyOutCounts();
+        PipeBarrier<PIPE_ALL>();
+    }
+
+    if (flagInverse) {
+        CopyOutInverse();
+        PipeBarrier<PIPE_ALL>();
+    }
 }
+
 } // namespace AscendC

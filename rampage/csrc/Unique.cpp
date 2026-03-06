@@ -20,17 +20,31 @@ namespace {
 int32_t SMALLEST_TENSOR_SIZE = 1;
 }
 
-at::Tensor npu_unique(const at::Tensor& input)
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor> npu_unique(
+    const at::Tensor& input, bool return_inverse, bool return_counts)
 {
     TORCH_CHECK_NPU(input);
     if (input.numel() <= SMALLEST_TENSOR_SIZE) {
         at::Tensor output = at::Tensor(input).clone();
-        return output;
+        at::Tensor uniqueCnt = at::tensor({input.numel()}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device()));
+        at::Tensor inverse = return_inverse ?
+            at::zeros({input.numel()}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device())) :
+            at::empty({0}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device()));
+        at::Tensor counts = return_counts ?
+            at::tensor({input.numel()}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device())) :
+            at::empty({0}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device()));
+        return std::make_tuple(output, uniqueCnt, inverse, counts);
     } else {
         at::Tensor output = at::empty({input.numel()}, at::TensorOptions().dtype(input.dtype()).device(input.device()));
         at::Tensor uniqueCnt = at::empty({1}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device()));
-        EXEC_NPU_CMD_SYNC(aclnnUniqueV2, input, output, uniqueCnt);
+        at::Tensor inverse = at::empty({input.numel()}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device()));
+        at::Tensor counts = at::empty({input.numel()}, at::TensorOptions().dtype(at::ScalarType::Int).device(input.device()));
+        EXEC_NPU_CMD_SYNC(aclnnUniqueV3, input, output, uniqueCnt, inverse, counts, return_inverse, return_counts);
         int uniqueCount = uniqueCnt.item<int>();
-        return output.narrow(0, 0, uniqueCount);
+        output = output.narrow(0, 0, uniqueCount);
+        if (return_counts) {
+            counts = counts.narrow(0, 0, uniqueCount);
+        }
+        return std::make_tuple(output, uniqueCnt, inverse, counts);
     }
 }

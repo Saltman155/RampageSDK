@@ -18,7 +18,8 @@
 
 //请在此处添加算子接口声明
 
-at::Tensor npu_unique(const at::Tensor& input);
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor> npu_unique(
+    const at::Tensor& input, bool return_inverse, bool return_counts);
 
 at::Tensor npu_add_custom(const at::Tensor& x, const at::Tensor& y);
 

@@ -108,7 +108,7 @@ USE_ARCH35=true python setup.py bdist_wheel
 
 ## 6. 算子结构详解
 
-请参考 [算子结构详解（以 UniqueV2 为例）](docs/OP_SAMPLE.md)。
+请参考 [算子结构详解（以 UniqueV3 为例）](docs/OP_SAMPLE.md)。
 
 
 ## 7. 常见问题
