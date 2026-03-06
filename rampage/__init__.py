@@ -1,6 +1,7 @@
 __all__ = [
     "npu_unique",
     "npu_add_custom",
+    "npu_bev_pool_v1",
 ]
 
 import os
@@ -13,6 +14,7 @@ import rampage._C
 
 from .ops.npu_unique import npu_unique
 from .ops.npu_add_custom import npu_add_custom
+from .ops.npu_bev_pool_v1 import npu_bev_pool_v1
 
 
 def _set_env():
